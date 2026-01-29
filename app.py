@@ -115,9 +115,8 @@ st.markdown("""
 # ============================================
 
 if "authenticated" not in st.session_state:
-    # TEMP: Auto-authenticate for testing
-    st.session_state.authenticated = True
-    st.session_state.user = {"username": "admin", "full_name": "Admin (Test)", "role": "admin"}
+    st.session_state.authenticated = False
+    st.session_state.user = None
 
 if "db_initialized" not in st.session_state:
     st.session_state.db_initialized = False
