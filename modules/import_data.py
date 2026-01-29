@@ -91,6 +91,7 @@ def import_csv(file_path: str, encoding: str = "utf-8") -> Dict[str, Any]:
 def _process_dataframe(df: pd.DataFrame, source_file: str) -> Dict[str, Any]:
     """
     Process a pandas DataFrame and insert into database
+    Optimized for bulk insertion/update
     
     Args:
         df: Pandas DataFrame
@@ -132,89 +133,140 @@ def _process_dataframe(df: pd.DataFrame, source_file: str) -> Dict[str, Any]:
     conn = get_connection()
     source_name = Path(source_file).name
     
-    rows_imported = 0
-    rows_skipped = 0
-    errors = []
+    # Prepare data for bulk operation
     
-    for idx, row in df.iterrows():
+    # 1. Normalize passport (Critical)
+    initial_count = len(df)
+    df['so_ho_chieu'] = df['so_ho_chieu'].astype(str).apply(normalize_passport)
+    
+    # Filter invalid passports
+    df = df[df['so_ho_chieu'].astype(bool)]
+    
+    rows_skipped = initial_count - len(df)
+
+    if df.empty:
+        return {
+            "success": True,
+            "rows_imported": 0,
+            "rows_skipped": rows_skipped,
+            "source_file": source_name
+        }
+
+    # 2. Normalize other fields
+    if 'ho_ten' in df.columns:
+        df['ho_ten'] = df['ho_ten'].astype(str).str.strip().where(df['ho_ten'].notna(), None)
+    else:
+        df['ho_ten'] = None
+
+    if 'quoc_tich' in df.columns:
+        df['quoc_tich'] = df['quoc_tich'].astype(str).str.strip().str.upper().where(df['quoc_tich'].notna(), None)
+    else:
+        df['quoc_tich'] = None
+
+    if 'dia_chi' in df.columns:
+        df['dia_chi_tam_tru'] = df['dia_chi'].astype(str).str.strip().where(df['dia_chi'].notna(), None)
+    elif 'dia_chi_tam_tru' not in df.columns:
+        df['dia_chi_tam_tru'] = None
+
+    if 'ket_qua_xac_minh' in df.columns:
+        df['ket_qua_xac_minh'] = df['ket_qua_xac_minh'].astype(str).str.strip().where(df['ket_qua_xac_minh'].notna(), None)
+    else:
+        df['ket_qua_xac_minh'] = None
+
+    # Date formatting
+    def safe_format_date(val):
+        if pd.isna(val) or str(val).lower() == 'nan':
+            return None
+        return format_date_for_db(str(val))
+
+    for date_col in ['ngay_sinh', 'ngay_den', 'ngay_di']:
+        if date_col in df.columns:
+             df[date_col] = df[date_col].apply(safe_format_date)
+        else:
+            df[date_col] = None
+
+    # Add source file
+    df['source_file'] = source_name
+
+    # Select only necessary columns
+    cols_to_keep = [
+        'so_ho_chieu', 'ho_ten', 'ngay_sinh', 'quoc_tich', 'ngay_den',
+        'ngay_di', 'dia_chi_tam_tru', 'ket_qua_xac_minh', 'source_file'
+    ]
+
+    # Ensure all columns exist
+    for col in cols_to_keep:
+        if col not in df.columns:
+            df[col] = None
+
+    final_df = df[cols_to_keep]
+
+    try:
+        # Register dataframe as a view
+        conn.register('temp_import_data', final_df)
+
+        # 1. Update existing records
+        # Update logic: Match on passport AND arrival date (ngay_den)
+        # Note: We use COALESCE for ket_qua_xac_minh to preserve existing verification if input is null
+        conn.execute("""
+            UPDATE raw_immigration
+            SET
+                ho_ten = t.ho_ten,
+                ngay_sinh = t.ngay_sinh,
+                quoc_tich = t.quoc_tich,
+                ngay_di = t.ngay_di,
+                dia_chi_tam_tru = t.dia_chi_tam_tru,
+                ket_qua_xac_minh = CASE
+                    WHEN t.ket_qua_xac_minh IS NOT NULL AND t.ket_qua_xac_minh != '' THEN t.ket_qua_xac_minh
+                    ELSE raw_immigration.ket_qua_xac_minh
+                END,
+                source_file = t.source_file,
+                thoi_diem_cap_nhat = CURRENT_TIMESTAMP
+            FROM temp_import_data t
+            WHERE raw_immigration.so_ho_chieu = t.so_ho_chieu
+              AND raw_immigration.ngay_den = t.ngay_den
+        """)
+
+        # 2. Insert new records
+        conn.execute("""
+            INSERT INTO raw_immigration (
+                so_ho_chieu, ho_ten, ngay_sinh, quoc_tich, ngay_den,
+                ngay_di, dia_chi_tam_tru, ket_qua_xac_minh, source_file, thoi_diem_cap_nhat
+            )
+            SELECT
+                t.so_ho_chieu, t.ho_ten, t.ngay_sinh, t.quoc_tich, t.ngay_den,
+                t.ngay_di, t.dia_chi_tam_tru, t.ket_qua_xac_minh, t.source_file, CURRENT_TIMESTAMP
+            FROM temp_import_data t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM raw_immigration r
+                WHERE r.so_ho_chieu = t.so_ho_chieu
+                  AND r.ngay_den = t.ngay_den
+            )
+        """)
+
+        conn.commit()
+
+        return {
+            "success": True,
+            "rows_imported": len(final_df),
+            "rows_skipped": rows_skipped,
+            "errors": None,
+            "source_file": source_name
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "rows_imported": 0,
+            "rows_skipped": initial_count
+        }
+    finally:
+        # Always try to cleanup the view
         try:
-            # Get passport (required)
-            passport = normalize_passport(str(row.get("so_ho_chieu", "")))
-            if not passport:
-                rows_skipped += 1
-                continue
-            
-            # Get other fields
-            ho_ten = str(row.get("ho_ten", "")).strip() if pd.notna(row.get("ho_ten")) else None
-            
-            # Parse dates
-            ngay_sinh = None
-            if pd.notna(row.get("ngay_sinh")):
-                ngay_sinh = format_date_for_db(str(row.get("ngay_sinh")))
-            
-            ngay_den = None
-            if pd.notna(row.get("ngay_den")):
-                ngay_den = format_date_for_db(str(row.get("ngay_den")))
-            
-            ngay_di = None
-            if pd.notna(row.get("ngay_di")):
-                ngay_di = format_date_for_db(str(row.get("ngay_di")))
-            
-            quoc_tich = str(row.get("quoc_tich", "")).strip().upper() if pd.notna(row.get("quoc_tich")) else None
-            dia_chi = str(row.get("dia_chi", "")).strip() if pd.notna(row.get("dia_chi")) else None
-            ket_qua = str(row.get("ket_qua_xac_minh", "")).strip() if pd.notna(row.get("ket_qua_xac_minh")) else None
-            
-            # Check for duplicates (Passport + Arrival Date)
-            existing = conn.execute(
-                "SELECT 1 FROM raw_immigration WHERE so_ho_chieu = ? AND ngay_den = ?", 
-                (passport, ngay_den)
-            ).fetchone()
-            
-            if existing:
-                # Update existing record
-                conn.execute("""
-                    UPDATE raw_immigration 
-                    SET ho_ten = ?, 
-                        ngay_sinh = ?, 
-                        quoc_tich = ?, 
-                        ngay_di = ?, 
-                        dia_chi_tam_tru = ?, 
-                        ket_qua_xac_minh = COALESCE(?, ket_qua_xac_minh),
-                        source_file = ?,
-                        thoi_diem_cap_nhat = CURRENT_TIMESTAMP
-                    WHERE so_ho_chieu = ? AND ngay_den = ?
-                """, (
-                    ho_ten, ngay_sinh, quoc_tich, ngay_di, dia_chi, ket_qua, source_name,
-                    passport, ngay_den
-                ))
-            else:    
-                # Insert into database
-                conn.execute("""
-                    INSERT INTO raw_immigration 
-                    (so_ho_chieu, ho_ten, ngay_sinh, quoc_tich, ngay_den, ngay_di, 
-                     dia_chi_tam_tru, ket_qua_xac_minh, source_file, thoi_diem_cap_nhat)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """, (
-                    passport, ho_ten, ngay_sinh, quoc_tich,
-                    ngay_den, ngay_di, dia_chi, ket_qua, source_name
-                ))
-            
-            rows_imported += 1
-            
-        except Exception as e:
-            rows_skipped += 1
-            if len(errors) < 5:
-                errors.append(f"Row {idx + 2}: {str(e)}")
-    
-    conn.commit()
-    
-    return {
-        "success": True,
-        "rows_imported": rows_imported,
-        "rows_skipped": rows_skipped,
-        "errors": errors if errors else None,
-        "source_file": source_name
-    }
+            conn.unregister('temp_import_data')
+        except Exception:
+            pass
 
 
 def import_verification_results(file_path: str) -> Dict[str, Any]:
