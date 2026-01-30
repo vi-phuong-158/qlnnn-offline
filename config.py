@@ -151,6 +151,21 @@ HEADER_MAP = {
     "diachi": "dia_chi",
     "address": "dia_chi",
     
+    # JSF specific headers (Vietnamese with diacritics)
+    "họ tên": "ho_ten",
+    "họ và tên": "ho_ten",
+    "ngày sinh": "ngay_sinh",
+    "số hộ chiếu": "so_ho_chieu",
+    "quốc tịch": "quoc_tich",
+    "qt": "quoc_tich",
+    "ngày đến": "ngay_den",
+    "ngày đi": "ngay_di",
+    "địa chỉ tạm trú": "dia_chi",
+    "địa chỉ": "dia_chi",
+    "giới tính": "gioi_tinh",
+    "gt": "gioi_tinh",
+    "số phòng": "so_phong",
+    
     # Verification result column
     "ket_qua_xac_minh": "ket_qua_xac_minh",
     "ketquaxacminh": "ket_qua_xac_minh",
