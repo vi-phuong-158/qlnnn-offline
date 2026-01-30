@@ -131,17 +131,18 @@ tab1, tab2 = st.tabs(["📝 Tra cứu đơn", "📋 Tra cứu hàng loạt"])
 with tab1:
     st.markdown("### Tìm kiếm theo số hộ chiếu hoặc họ tên")
     
-    col1, col2 = st.columns([4, 1])
-    
-    with col1:
-        keyword = st.text_input(
-            "Từ khóa tìm kiếm",
-            placeholder="Nhập số hộ chiếu hoặc họ tên...",
-            label_visibility="collapsed"
-        )
-    
-    with col2:
-        search_btn = st.button("🔍 Tìm kiếm", use_container_width=True, type="primary")
+    with st.form(key="search_form"):
+        col1, col2 = st.columns([4, 1])
+
+        with col1:
+            keyword = st.text_input(
+                "Từ khóa tìm kiếm",
+                placeholder="Nhập số hộ chiếu hoặc họ tên...",
+                label_visibility="collapsed"
+            )
+
+        with col2:
+            search_btn = st.form_submit_button("🔍 Tìm kiếm", use_container_width=True, type="primary")
     
     if search_btn and keyword:
         with st.spinner("Đang tìm kiếm..."):
