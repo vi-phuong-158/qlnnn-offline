@@ -174,8 +174,8 @@ def login():
         
         st.markdown("""
         <div style="text-align: center; margin-top: 1rem; color: #666; font-size: 0.9rem;">
-            <p>Tài khoản mặc định: admin / admin123</p>
-            <p>⚠️ Vui lòng đổi mật khẩu sau khi đăng nhập lần đầu</p>
+            <p>Vui lòng sử dụng tài khoản được cung cấp.</p>
+            <p>⚠️ Nên đổi mật khẩu sau khi đăng nhập lần đầu</p>
         </div>
         """, unsafe_allow_html=True)
 
