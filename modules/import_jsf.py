@@ -42,6 +42,9 @@ JSF_HEADER_MAP = {
     "địa chỉ": "dia_chi_tam_tru",
 }
 
+# Chunk size cho import file lớn (số dòng mỗi chunk)
+CHUNK_SIZE = 5000
+
 
 def extract_jsf_data(file_path: str) -> Optional[pd.DataFrame]:
     """
@@ -403,3 +406,257 @@ def import_jsf_to_excel(file_path: str, output_path: str = None) -> Dict[str, An
         "output_path": output_path,
         "columns": list(df.columns)
     }
+
+
+def _process_and_import_chunk(
+    chunk_df: pd.DataFrame, 
+    source_name: str, 
+    conn
+) -> Dict[str, Any]:
+    """
+    Xử lý và import một chunk DataFrame vào database.
+    Hàm nội bộ, được gọi bởi import_jsf_chunked().
+    
+    Args:
+        chunk_df: DataFrame chunk để xử lý
+        source_name: Tên file nguồn
+        conn: Database connection
+        
+    Returns:
+        Dict với số dòng inserted/updated
+    """
+    # Chuẩn hóa cột
+    df = normalize_jsf_columns(chunk_df.copy())
+    
+    # Kiểm tra cột bắt buộc
+    if 'so_ho_chieu' not in df.columns:
+        return {"error": "Không tìm thấy cột 'Số hộ chiếu'", "inserted": 0, "updated": 0}
+    
+    # Chuẩn hóa passport
+    df['so_ho_chieu'] = df['so_ho_chieu'].astype(str).apply(normalize_passport)
+    df = df[df['so_ho_chieu'].astype(bool)]
+    
+    if df.empty:
+        return {"inserted": 0, "updated": 0, "skipped": len(chunk_df)}
+    
+    # Chuẩn hóa các trường
+    if 'ho_ten' in df.columns:
+        df['ho_ten'] = df['ho_ten'].astype(str).str.strip().replace('nan', None)
+    else:
+        df['ho_ten'] = None
+    
+    if 'quoc_tich' in df.columns:
+        df['quoc_tich'] = df['quoc_tich'].astype(str).str.strip().str.upper().replace('NAN', None)
+    else:
+        df['quoc_tich'] = None
+    
+    if 'dia_chi_tam_tru' in df.columns:
+        df['dia_chi_tam_tru'] = df['dia_chi_tam_tru'].astype(str).str.replace(r'\n', ', ', regex=True).str.strip().replace('nan', None)
+    else:
+        df['dia_chi_tam_tru'] = None
+    
+    # Chuẩn hóa ngày
+    df = normalize_jsf_dates(df)
+    
+    # Validation
+    valid_rows = []
+    validator = ImportValidator()
+    records = df.to_dict('records')
+    
+    for idx, row in enumerate(records):
+        validator.reset()
+        validate_import_row(row, idx + 2, validator)
+        if validator.get_result().is_valid:
+            valid_rows.append(row)
+    
+    if not valid_rows:
+        return {"inserted": 0, "updated": 0, "skipped": len(chunk_df)}
+    
+    # Tạo DataFrame từ valid rows
+    df = pd.DataFrame(valid_rows)
+    df['source_file'] = source_name
+    
+    # Chuẩn bị cột
+    cols_to_keep = [
+        'so_ho_chieu', 'ho_ten', 'ngay_sinh', 'quoc_tich', 'ngay_den',
+        'ngay_di', 'dia_chi_tam_tru', 'source_file'
+    ]
+    
+    if 'ket_qua_xac_minh' not in df.columns:
+        df['ket_qua_xac_minh'] = None
+    cols_to_keep.append('ket_qua_xac_minh')
+    
+    for col in cols_to_keep:
+        if col not in df.columns:
+            df[col] = None
+    
+    final_df = df[cols_to_keep]
+    
+    # Import vào database
+    import uuid
+    temp_table = f"temp_chunk_{uuid.uuid4().hex[:8]}"
+    
+    try:
+        conn.register(temp_table, final_df)
+        
+        # Update existing
+        conn.execute(f"""
+            UPDATE raw_immigration
+            SET
+                ho_ten = t.ho_ten,
+                ngay_sinh = t.ngay_sinh,
+                quoc_tich = t.quoc_tich,
+                ngay_di = t.ngay_di,
+                dia_chi_tam_tru = t.dia_chi_tam_tru,
+                ket_qua_xac_minh = CASE
+                    WHEN t.ket_qua_xac_minh IS NOT NULL AND t.ket_qua_xac_minh != '' THEN t.ket_qua_xac_minh
+                    ELSE raw_immigration.ket_qua_xac_minh
+                END,
+                source_file = t.source_file,
+                thoi_diem_cap_nhat = CURRENT_TIMESTAMP
+            FROM {temp_table} t
+            WHERE raw_immigration.so_ho_chieu = t.so_ho_chieu
+              AND raw_immigration.ngay_den = t.ngay_den
+        """)
+        
+        # Count updated
+        updated_result = conn.execute(f"""
+            SELECT COUNT(*) FROM raw_immigration r
+            WHERE EXISTS (
+                SELECT 1 FROM {temp_table} t
+                WHERE r.so_ho_chieu = t.so_ho_chieu
+                  AND r.ngay_den = t.ngay_den
+            )
+        """).fetchone()
+        rows_updated = updated_result[0] if updated_result else 0
+        
+        # Insert new
+        conn.execute(f"""
+            INSERT INTO raw_immigration (
+                so_ho_chieu, ho_ten, ngay_sinh, quoc_tich, ngay_den,
+                ngay_di, dia_chi_tam_tru, ket_qua_xac_minh, source_file, thoi_diem_cap_nhat
+            )
+            SELECT
+                t.so_ho_chieu, t.ho_ten, t.ngay_sinh, t.quoc_tich, t.ngay_den,
+                t.ngay_di, t.dia_chi_tam_tru, t.ket_qua_xac_minh, t.source_file, CURRENT_TIMESTAMP
+            FROM {temp_table} t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM raw_immigration r
+                WHERE r.so_ho_chieu = t.so_ho_chieu
+                  AND r.ngay_den = t.ngay_den
+            )
+        """)
+        
+        rows_inserted = len(final_df) - rows_updated
+        conn.commit()
+        
+        return {"inserted": rows_inserted, "updated": rows_updated, "skipped": len(chunk_df) - len(final_df)}
+        
+    finally:
+        try:
+            conn.unregister(temp_table)
+        except Exception:
+            pass
+
+
+from typing import Callable
+
+def import_jsf_chunked(
+    file_path: str, 
+    progress_callback: Callable[[float, str], None] = None,
+    chunk_size: int = None
+) -> Dict[str, Any]:
+    """
+    Import JSF với chunk processing cho file lớn.
+    Chia file thành các chunks và import từng phần với progress callback.
+    
+    Args:
+        file_path: Đường dẫn file JSF
+        progress_callback: Callback function(progress: float, message: str)
+                          progress từ 0.0 đến 1.0
+        chunk_size: Số dòng mỗi chunk (default: CHUNK_SIZE = 5000)
+        
+    Returns:
+        Dict với kết quả import tổng hợp
+    """
+    if chunk_size is None:
+        chunk_size = CHUNK_SIZE
+    
+    # 1. Trích xuất toàn bộ dữ liệu từ JSF
+    if progress_callback:
+        progress_callback(0.0, "Đang đọc file JSF...")
+    
+    df = extract_jsf_data(file_path)
+    
+    if df is None or df.empty:
+        return {
+            "success": False,
+            "error": "Không thể đọc dữ liệu từ file JSF hoặc file trống",
+            "rows_imported": 0,
+            "rows_skipped": 0
+        }
+    
+    total_rows = len(df)
+    source_name = Path(file_path).name
+    
+    if progress_callback:
+        progress_callback(0.1, f"Đã đọc {total_rows:,} dòng, bắt đầu import...")
+    
+    # 2. Nếu file nhỏ, dùng import thông thường
+    if total_rows <= chunk_size:
+        if progress_callback:
+            progress_callback(0.5, "File nhỏ, import trực tiếp...")
+        result = import_jsf(file_path)
+        if progress_callback:
+            progress_callback(1.0, "Hoàn thành!")
+        return result
+    
+    # 3. Chia thành chunks và import
+    conn = get_connection()
+    total_chunks = (total_rows + chunk_size - 1) // chunk_size
+    
+    total_inserted = 0
+    total_updated = 0
+    total_skipped = 0
+    errors = []
+    
+    for i, chunk_start in enumerate(range(0, total_rows, chunk_size)):
+        chunk_end = min(chunk_start + chunk_size, total_rows)
+        chunk_df = df.iloc[chunk_start:chunk_end]
+        
+        # Cập nhật progress
+        if progress_callback:
+            progress = 0.1 + (0.85 * (i + 1) / total_chunks)
+            progress_callback(
+                progress, 
+                f"Đang xử lý chunk {i + 1}/{total_chunks} ({chunk_end:,}/{total_rows:,} dòng)..."
+            )
+        
+        # Import chunk
+        try:
+            chunk_result = _process_and_import_chunk(chunk_df, source_name, conn)
+            total_inserted += chunk_result.get("inserted", 0)
+            total_updated += chunk_result.get("updated", 0)
+            total_skipped += chunk_result.get("skipped", 0)
+            
+            if chunk_result.get("error"):
+                errors.append(f"Chunk {i + 1}: {chunk_result['error']}")
+                
+        except Exception as e:
+            errors.append(f"Chunk {i + 1}: {str(e)}")
+    
+    if progress_callback:
+        progress_callback(1.0, "Hoàn thành!")
+    
+    return {
+        "success": len(errors) == 0,
+        "rows_imported": total_inserted + total_updated,
+        "rows_inserted": total_inserted,
+        "rows_updated": total_updated,
+        "rows_skipped": total_skipped,
+        "total_chunks": total_chunks,
+        "chunk_size": chunk_size,
+        "errors": errors if errors else None,
+        "source_file": source_name
+    }
+

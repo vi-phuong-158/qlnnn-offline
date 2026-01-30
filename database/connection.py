@@ -157,16 +157,93 @@ def table_exists(table_name: str) -> bool:
     return result[0] > 0
 
 
+# Whitelist of allowed table names for safe queries
+SAFE_TABLES = frozenset({
+    'raw_immigration', 'ref_labor', 'ref_watchlist', 
+    'ref_marriage', 'ref_student', 'users', 'audit_log'
+})
+
+
 def get_table_count(table_name: str) -> int:
     """
-    Get row count of a table
+    Get row count of a whitelist-approved table.
     
     Args:
-        table_name: Name of the table
+        table_name: Name of the table (must be in SAFE_TABLES)
         
     Returns:
         Number of rows
+        
+    Raises:
+        ValueError: If table_name not in whitelist
+    """
+    if table_name not in SAFE_TABLES:
+        raise ValueError(f"Table '{table_name}' not allowed")
+    
+    conn = get_connection()
+    # Use identifier quoting for additional safety
+    result = conn.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()
+    return result[0]
+
+
+def create_performance_indexes() -> Dict[str, bool]:
+    """
+    Tạo các index tối ưu performance cho bảng raw_immigration.
+    Index giúp tăng tốc:
+    - Lọc trùng khi import (so_ho_chieu + ngay_den)
+    - Thống kê theo quốc tịch
+    
+    Returns:
+        Dict với tên index và trạng thái (True = tạo thành công)
     """
     conn = get_connection()
-    result = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
-    return result[0]
+    results = {}
+    
+    indexes = [
+        # Composite index cho lọc trùng - equality columns first
+        ("idx_passport_ngayden", 
+         "CREATE INDEX IF NOT EXISTS idx_passport_ngayden ON raw_immigration(so_ho_chieu, ngay_den)"),
+        
+        # Index cho thống kê theo quốc tịch
+        ("idx_quoctich", 
+         "CREATE INDEX IF NOT EXISTS idx_quoctich ON raw_immigration(quoc_tich)"),
+    ]
+    
+    for index_name, sql in indexes:
+        try:
+            conn.execute(sql)
+            results[index_name] = True
+        except Exception as e:
+            results[index_name] = False
+            print(f"Warning: Could not create index {index_name}: {e}")
+    
+    conn.commit()
+    return results
+
+
+def get_indexes(table_name: str = "raw_immigration") -> List[Dict[str, Any]]:
+    """
+    Liệt kê các index của một bảng.
+    
+    Args:
+        table_name: Tên bảng
+        
+    Returns:
+        List các index với thông tin chi tiết
+    """
+    conn = get_connection()
+    try:
+        result = conn.execute(f"""
+            SELECT index_name, is_unique, sql 
+            FROM duckdb_indexes() 
+            WHERE table_name = '{table_name}'
+        """).fetchall()
+        
+        return [
+            {"name": row[0], "unique": row[1], "sql": row[2]}
+            for row in result
+        ]
+    except Exception:
+        # Fallback for older DuckDB versions
+        return []
+
