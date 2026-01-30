@@ -69,6 +69,8 @@ if uploaded_file:
                 
                 if result["success"]:
                     st.success(f"✅ Đã import **{result['rows_imported']}** dòng")
+                    st.cache_data.clear()
+                    st.toast("🧹 Đã xóa cache dữ liệu cũ", icon="🧹")
                 else:
                     st.error(f"❌ Lỗi: {result['error']}")
             finally:

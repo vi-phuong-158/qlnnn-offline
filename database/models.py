@@ -51,6 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_passport ON raw_immigration(so_ho_chieu);
 CREATE INDEX IF NOT EXISTS idx_ngay_den ON raw_immigration(ngay_den);
 CREATE INDEX IF NOT EXISTS idx_quoc_tich ON raw_immigration(quoc_tich);
 CREATE INDEX IF NOT EXISTS idx_ho_ten ON raw_immigration(ho_ten);
+CREATE INDEX IF NOT EXISTS idx_last_update ON raw_immigration(thoi_diem_cap_nhat);
 
 -- Composite indexes for batch search optimization
 CREATE INDEX IF NOT EXISTS idx_passport_status ON raw_immigration(so_ho_chieu, ket_qua_xac_minh);

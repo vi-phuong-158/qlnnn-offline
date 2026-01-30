@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 from datetime import date, datetime
 import sys
 from pathlib import Path
+import streamlit as st
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -15,6 +16,7 @@ from utils.date_utils import format_date_for_db, format_date_vn
 from config import get_continent, CONTINENT_RULES, PAGE_SIZE
 
 
+@st.cache_data(ttl=300)
 def get_statistics(
     date_from: str = None,
     date_to: str = None,
@@ -131,6 +133,7 @@ def get_statistics(
     }
 
 
+@st.cache_data(ttl=300)
 def get_statistics_by_nationality(
     date_from: str = None,
     date_to: str = None,
@@ -329,6 +332,7 @@ def get_person_list(
     }
 
 
+@st.cache_data(ttl=300)
 def generate_narrative(
     date_from: str = None,
     date_to: str = None,
@@ -425,6 +429,7 @@ def get_last_update_time() -> str:
     return "Chưa có dữ liệu"
 
 
+@st.cache_data(ttl=300)
 def get_ml_predictions(risk_level: str = None, limit: int = 100) -> List[Dict[str, Any]]:
     """
     Dự đoán mục đích dựa trên quy tắc (Rule-based ML Predictions)
@@ -541,6 +546,7 @@ def get_ml_predictions(risk_level: str = None, limit: int = 100) -> List[Dict[st
     return results
 
 
+@st.cache_data(ttl=300)
 def generate_narrative_by_purpose(
     date_from: str = None,
     date_to: str = None,
@@ -674,6 +680,7 @@ def generate_narrative_by_purpose(
     return "\n\n".join(narrative_lines)
 
 
+@st.cache_data(ttl=300)
 def get_matrix_report(
     date_from: str = None,
     date_to: str = None,
