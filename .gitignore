@@ -8,6 +8,7 @@ venv/
 .env
 .venv
 *.db
+*.db.wal
 *.sqlite
 data/qlnnn.db
 data/imports/

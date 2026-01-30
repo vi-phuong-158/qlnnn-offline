@@ -5,6 +5,14 @@ Create tables and initialize database
 
 from .connection import get_connection, table_exists
 import bcrypt
+import secrets
+import sys
+from pathlib import Path
+
+# Add parent to path if needed (although connection.py does it too)
+# This ensures config import works even if models.py is imported directly
+sys.path.append(str(Path(__file__).parent.parent))
+from config import DEFAULT_ADMIN
 
 
 # ============================================
@@ -362,9 +370,22 @@ def init_database() -> bool:
     ).fetchone()
     
     if result[0] == 0:
-        # Hash the default password
+        # Get password from config or generate random
+        password = DEFAULT_ADMIN["password"]
+        generated = False
+
+        if not password:
+            password = secrets.token_urlsafe(12)
+            generated = True
+            print("\n" + "="*60)
+            print("⚠️  ADMIN PASSWORD NOT SET. GENERATED RANDOM PASSWORD:")
+            print(f"   {password}")
+            print("   PLEASE SAVE THIS PASSWORD OR CHANGE IT IMMEDIATELY!")
+            print("="*60 + "\n")
+
+        # Hash the password
         password_hash = bcrypt.hashpw(
-            "admin123".encode('utf-8'),
+            password.encode('utf-8'),
             bcrypt.gensalt()
         ).decode('utf-8')
         
@@ -374,7 +395,11 @@ def init_database() -> bool:
             ("admin", password_hash, "admin", "Administrator")
         )
         conn.commit()
-        print("✅ Created default admin user (username: admin, password: admin123)")
+
+        if generated:
+            print("✅ Created default admin user with GENERATED password")
+        else:
+            print("✅ Created default admin user with configured password")
     
     return True
 

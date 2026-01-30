@@ -38,7 +38,7 @@ DB_CONFIG = {
 # Default admin user (password will be hashed)
 DEFAULT_ADMIN = {
     "username": "admin",
-    "password": "admin123",  # Change this on first login!
+    "password": os.environ.get("QLNNN_ADMIN_PASSWORD"),  # None by default, will auto-generate if unset
     "role": "admin",
     "full_name": "Administrator"
 }
