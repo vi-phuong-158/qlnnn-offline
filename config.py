@@ -35,14 +35,6 @@ DB_CONFIG = {
 # USER ROLES & PERMISSIONS
 # ============================================
 
-# Default admin user (password will be hashed)
-DEFAULT_ADMIN = {
-    "username": "admin",
-    "password": "admin123",  # Change this on first login!
-    "role": "admin",
-    "full_name": "Administrator"
-}
-
 ROLE_ADMIN = "admin"
 ROLE_COMMUNE = "commune"
 

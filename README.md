@@ -81,12 +81,29 @@ streamlit run Trang_chu.py
 
 Mở trình duyệt và truy cập: `http://localhost:8501`
 
-## Tài khoản mặc định
+## Tài khoản Admin (Khởi tạo lần đầu)
 
-- **Username**: admin
-- **Password**: admin123
+Hệ thống không còn sử dụng mật khẩu mặc định "admin123".
 
-⚠️ **Quan trọng**: Đổi mật khẩu ngay sau khi đăng nhập lần đầu!
+Khi chạy lần đầu tiên (hoặc khi reset database), mật khẩu admin sẽ được:
+1. **Lấy từ biến môi trường** `QLNNN_ADMIN_PASSWORD` (nếu có).
+2. **Hoặc tự động sinh ngẫu nhiên** và hiển thị trên màn hình console (Terminal/Command Prompt).
+
+### Cách thiết lập mật khẩu cố định:
+
+**Windows (CMD/PowerShell):**
+```bash
+set QLNNN_ADMIN_PASSWORD=MatKhauBaoMat123
+streamlit run Trang_chu.py
+```
+
+**macOS/Linux:**
+```bash
+export QLNNN_ADMIN_PASSWORD=MatKhauBaoMat123
+streamlit run Trang_chu.py
+```
+
+⚠️ **Lưu ý**: Hãy lưu lại mật khẩu được sinh ra nếu bạn không thiết lập biến môi trường!
 
 ## Cấu trúc thư mục
 

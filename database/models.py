@@ -5,6 +5,9 @@ Create tables and initialize database
 
 from .connection import get_connection, table_exists
 import bcrypt
+import os
+import secrets
+import string
 
 
 # ============================================
@@ -362,9 +365,21 @@ def init_database() -> bool:
     ).fetchone()
     
     if result[0] == 0:
-        # Hash the default password
+        # Get password from env or generate random
+        env_password = os.environ.get("QLNNN_ADMIN_PASSWORD")
+
+        if env_password:
+            password = env_password
+            msg = "✅ Created default admin user using QLNNN_ADMIN_PASSWORD"
+        else:
+            # Generate secure random password
+            alphabet = string.ascii_letters + string.digits + string.punctuation
+            password = ''.join(secrets.choice(alphabet) for i in range(12))
+            msg = f"\n🛡️ SECURITY ALERT: Created default admin user with GENERATED password: {password}\n👉 PLEASE SAVE THIS PASSWORD NOW!"
+
+        # Hash the password
         password_hash = bcrypt.hashpw(
-            "admin123".encode('utf-8'),
+            password.encode('utf-8'),
             bcrypt.gensalt()
         ).decode('utf-8')
         
@@ -374,7 +389,7 @@ def init_database() -> bool:
             ("admin", password_hash, "admin", "Administrator")
         )
         conn.commit()
-        print("✅ Created default admin user (username: admin, password: admin123)")
+        print(msg)
     
     return True
 
