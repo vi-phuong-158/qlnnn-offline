@@ -189,17 +189,18 @@ with tab2:
         st.session_state.batch_keywords = []
         st.session_state.batch_offset = 0
     
-    batch_input = st.text_area(
-        "Danh sách số hộ chiếu",
-        height=150,
-        placeholder="E1234567\nE2345678\nE3456789\n...",
-        label_visibility="collapsed"
-    )
-    
-    col1, col2 = st.columns([1, 4])
-    
-    with col1:
-        batch_search_btn = st.button("📋 Tra cứu hàng loạt", type="primary", use_container_width=True)
+    with st.form(key="batch_search_form"):
+        batch_input = st.text_area(
+            "Danh sách số hộ chiếu",
+            height=150,
+            placeholder="E1234567\nE2345678\nE3456789\n...",
+            label_visibility="collapsed"
+        )
+
+        col1, col2 = st.columns([1, 4])
+
+        with col1:
+            batch_search_btn = st.form_submit_button("📋 Tra cứu hàng loạt", type="primary", use_container_width=True)
     
     if batch_search_btn and batch_input:
         keywords = split_passports(batch_input)
