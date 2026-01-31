@@ -13,6 +13,11 @@ sys.path.append(str(Path(__file__).parent.parent))
 from database.connection import get_connection, execute_query
 from utils.date_utils import format_date_for_db, format_date_vn
 from config import get_continent, CONTINENT_RULES, PAGE_SIZE
+from utils.filter_utils import (
+    build_continent_condition, 
+    build_date_conditions, 
+    build_residence_status_condition
+)
 
 
 def get_statistics(
@@ -42,50 +47,27 @@ def get_statistics(
     conditions = []
     params = []
     
-    if date_from:
-        conditions.append("ngay_den >= ?")
-        params.append(date_from)
+    # Date filters
+    date_conds, date_params = build_date_conditions(date_from, date_to, min_days)
+    conditions.extend(date_conds)
+    params.extend(date_params)
     
-    if date_to and not min_days:
-        conditions.append("(ngay_di IS NULL OR ngay_di <= ?)")
-        params.append(date_to)
-    
-    # Filter by min accumulated days (total residence in year)
-    if min_days is not None:
-        conditions.append("tong_ngay_luu_tru_2025 >= ?")
-        params.append(min_days)
-        # Also filter only those currently residing (not departed yet)
-        conditions.append("(ngay_di IS NULL OR ngay_di >= CURRENT_DATE)")
-    
-    if continent:
-        countries = []
-        # If continent is passed as list of strings (e.g. from multiselect)
-        if isinstance(continent, list) and "ALL" not in continent:
-            for c in continent:
-                if c == "ASIA_OCEANIA":
-                     countries.extend(CONTINENT_RULES.get("ASIA", []) + CONTINENT_RULES.get("OCEANIA", []))
-                else:
-                    countries.extend(CONTINENT_RULES.get(c, []))
-        # Logic cũ cho string đơn (giữ tương thích)
-        elif isinstance(continent, str) and continent != "ALL":
-             if continent == "ASIA_OCEANIA":
-                countries = CONTINENT_RULES.get("ASIA", []) + CONTINENT_RULES.get("OCEANIA", [])
-             else:
-                countries = CONTINENT_RULES.get(continent, [])
-
-        if countries:
-            placeholders = ", ".join(["?" for _ in countries])
-            conditions.append(f"UPPER(quoc_tich) IN ({placeholders})")
-            params.extend(countries)
+    # Continent filter
+    cont_cond, cont_params = build_continent_condition(continent)
+    if cont_cond:
+        conditions.append(cont_cond)
+        params.extend(cont_params)
     
     if days_value is not None:
         op = ">=" if days_operator == ">=" else "<="
         conditions.append(f"tong_ngay_luu_tru_2025 {op} ?")
         params.append(days_value)
     
-    if residence_status:
-        conditions.append("trang_thai_cuoi_cung = ?")
-        params.append(residence_status)
+    # Residence status filter
+    status_cond, status_params = build_residence_status_condition(residence_status)
+    if status_cond:
+        conditions.append(status_cond)
+        params.extend(status_params)
     
     where_clause = " AND ".join(conditions) if conditions else "1=1"
     
@@ -153,42 +135,16 @@ def get_statistics_by_nationality(
     conditions = []
     params = []
     
-    if date_from:
-        conditions.append("ngay_den >= ?")
-        params.append(date_from)
+    # Date filters
+    date_conds, date_params = build_date_conditions(date_from, date_to, min_days)
+    conditions.extend(date_conds)
+    params.extend(date_params)
     
-    if date_to and not min_days:
-        conditions.append("(ngay_di IS NULL OR ngay_di <= ?)")
-        params.append(date_to)
-        
-    if min_days is not None:
-        conditions.append("tong_ngay_luu_tru_2025 >= ?")
-        params.append(min_days)
-        # Also filter only those currently residing (not departed yet)
-        conditions.append("(ngay_di IS NULL OR ngay_di >= CURRENT_DATE)")
-    
-    if continent:
-        countries = []
-        # If continent is passed as list of strings
-        if isinstance(continent, list):
-            if "ALL" not in continent:
-                for c in continent:
-                    if c == "ASIA_OCEANIA":
-                        countries.extend(CONTINENT_RULES.get("ASIA", []) + CONTINENT_RULES.get("OCEANIA", []))
-                    else:
-                        countries.extend(CONTINENT_RULES.get(c, []))
-        # Logic cũ
-        elif isinstance(continent, str) and continent != "ALL":
-             if continent == "ASIA_OCEANIA":
-                countries = CONTINENT_RULES.get("ASIA", []) + CONTINENT_RULES.get("OCEANIA", [])
-             else:
-                countries = CONTINENT_RULES.get(continent, [])
-            
-        if countries:
-            countries = list(set(countries))
-            placeholders = ", ".join(["?" for _ in countries])
-            conditions.append(f"UPPER(quoc_tich) IN ({placeholders})")
-            params.extend(countries)
+    # Continent filter
+    cont_cond, cont_params = build_continent_condition(continent)
+    if cont_cond:
+        conditions.append(cont_cond)
+        params.extend(cont_params)
     
     where_clause = " AND ".join(conditions) if conditions else "1=1"
     
@@ -232,50 +188,27 @@ def get_person_list(
     conditions = []
     params = []
     
-    if date_from:
-        conditions.append("ngay_den >= ?")
-        params.append(date_from)
+    # Date filters
+    date_conds, date_params = build_date_conditions(date_from, date_to, min_days)
+    conditions.extend(date_conds)
+    params.extend(date_params)
     
-    if date_to:
-        conditions.append("(ngay_di IS NULL OR ngay_di <= ?)")
-        params.append(date_to)
-    
-    if continent:
-        countries = []
-        if isinstance(continent, list):
-            if "ALL" not in continent:
-                for c in continent:
-                    if c == "ASIA_OCEANIA":
-                        countries.extend(CONTINENT_RULES.get("ASIA", []) + CONTINENT_RULES.get("OCEANIA", []))
-                    else:
-                        countries.extend(CONTINENT_RULES.get(c, []))
-        elif isinstance(continent, str) and continent != "ALL":
-             if continent == "ASIA_OCEANIA":
-                countries = CONTINENT_RULES.get("ASIA", []) + CONTINENT_RULES.get("OCEANIA", [])
-             else:
-                countries = CONTINENT_RULES.get(continent, [])
-            
-        if countries:
-            countries = list(set(countries))
-            placeholders = ", ".join(["?" for _ in countries])
-            conditions.append(f"UPPER(quoc_tich) IN ({placeholders})")
-            params.extend(countries)
+    # Continent filter
+    cont_cond, cont_params = build_continent_condition(continent)
+    if cont_cond:
+        conditions.append(cont_cond)
+        params.extend(cont_params)
     
     if days_value is not None:
         op = ">=" if days_operator == ">=" else "<="
         conditions.append(f"tong_ngay_luu_tru_2025 {op} ?")
         params.append(days_value)
     
-    # Filter by min accumulated days (total residence in year)
-    if min_days is not None:
-        conditions.append("tong_ngay_luu_tru_2025 >= ?")
-        params.append(min_days)
-        # Also filter only those currently residing (not departed yet)
-        conditions.append("(ngay_di IS NULL OR ngay_di >= CURRENT_DATE)")
-    
-    if residence_status:
-        conditions.append("trang_thai_cuoi_cung = ?")
-        params.append(residence_status)
+    # Residence status filter
+    status_cond, status_params = build_residence_status_condition(residence_status)
+    if status_cond:
+        conditions.append(status_cond)
+        params.extend(status_params)
     
     where_clause = " AND ".join(conditions) if conditions else "1=1"
     
@@ -568,44 +501,38 @@ def generate_narrative_by_purpose(
     conditions = []
     params = []
     
-    # Filter conditions
+    # Date filters
+    # Note: generate_narrative_by_purpose logic slighty different, but let's see if we can adapt
+    # It has specific logic for 'dang_tam_tru' vs 'da_ket_thuc' which build_date_conditions doesn't handle fully 
+    # BUT build_residence_status_condition DOES handle it.
+    
+    # Re-implementing logic using helpers where consistent:
+    
+    # 1. Date filters (if not special status)
     if residence_status != 'dang_tam_tru':
         if date_from:
             conditions.append("ngay_den >= ?")
             params.append(date_from)
         if date_to and not min_days:
-            conditions.append("ngay_den <= ?")
+            conditions.append("ngay_den <= ?") # Note: Original was strict <=, our helper uses <= OR NULL. Keep original for safety?
+            # Actually, let's keep it close to original for this specific function to avoid subtle bugs
             params.append(date_to)
-            
+    
     if min_days is not None:
         conditions.append("tong_ngay_luu_tru_2025 >= ?")
         params.append(min_days)
-    
-    if continent:
-        countries = []
-        if isinstance(continent, list):
-            if "ALL" not in continent:
-                for c in continent:
-                    if c == "ASIA_OCEANIA":
-                        countries.extend(CONTINENT_RULES.get("ASIA", []) + CONTINENT_RULES.get("OCEANIA", []))
-                    else:
-                        countries.extend(CONTINENT_RULES.get(c, []))
-        elif isinstance(continent, str) and continent != "ALL":
-            if continent == "ASIA_OCEANIA":
-                countries = CONTINENT_RULES.get("ASIA", []) + CONTINENT_RULES.get("OCEANIA", [])
-            else:
-                countries = CONTINENT_RULES.get(continent, [])
 
-        if countries:
-            countries = list(set(countries))
-            placeholders = ", ".join(["?" for _ in countries])
-            conditions.append(f"UPPER(quoc_tich) IN ({placeholders})")
-            params.extend(countries)
-    
-    if residence_status == 'dang_tam_tru':
-        conditions.append("(ngay_di IS NULL OR ngay_di > CURRENT_DATE)")
-    elif residence_status == 'da_ket_thuc':
-        conditions.append("(ngay_di IS NOT NULL AND ngay_di <= CURRENT_DATE)")
+    # 2. Continent
+    cont_cond, cont_params = build_continent_condition(continent)
+    if cont_cond:
+        conditions.append(cont_cond)
+        params.extend(cont_params)
+        
+    # 3. Status special handling
+    status_cond, status_params = build_residence_status_condition(residence_status)
+    if status_cond:
+        conditions.append(status_cond)
+        params.extend(status_params)
     
     where_clause = " AND ".join(conditions) if conditions else "1=1"
     
@@ -703,6 +630,12 @@ def get_matrix_report(
     conditions = []
     params = []
     
+    # Date filters
+    date_conds, date_params = build_date_conditions(date_from, date_to, min_days)
+    # Note: get_matrix_report uses STRICT date_to ("ngay_den <= ?") in original, 
+    # whereas build_date_conditions uses range check on end_date. 
+    # Let's keep original logic for date_to to match "Arrival Date" semantics usually desired in Matrix
+    
     if date_from:
         conditions.append("ngay_den >= ?")
         params.append(date_from)
@@ -710,31 +643,16 @@ def get_matrix_report(
     if date_to and not min_days:
         conditions.append("ngay_den <= ?")
         params.append(date_to)
-        
+
     if min_days is not None:
         conditions.append("tong_ngay_luu_tru_2025 >= ?")
         params.append(min_days)
-    
-    if continent:
-        countries = []
-        if isinstance(continent, list):
-            if "ALL" not in continent:
-                for c in continent:
-                    if c == "ASIA_OCEANIA":
-                        countries.extend(CONTINENT_RULES.get("ASIA", []) + CONTINENT_RULES.get("OCEANIA", []))
-                    else:
-                        countries.extend(CONTINENT_RULES.get(c, []))
-        elif isinstance(continent, str) and continent != "ALL":
-            if continent == "ASIA_OCEANIA":
-                countries = CONTINENT_RULES.get("ASIA", []) + CONTINENT_RULES.get("OCEANIA", [])
-            else:
-                countries = CONTINENT_RULES.get(continent, [])
-
-        if countries:
-            countries = list(set(countries))
-            placeholders = ", ".join(["?" for _ in countries])
-            conditions.append(f"UPPER(quoc_tich) IN ({placeholders})")
-            params.extend(countries)
+        
+    # Continent filter
+    cont_cond, cont_params = build_continent_condition(continent)
+    if cont_cond:
+        conditions.append(cont_cond)
+        params.extend(cont_params)
     
     where_clause = " AND ".join(conditions) if conditions else "1=1"
     

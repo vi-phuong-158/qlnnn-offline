@@ -18,6 +18,7 @@ from modules.statistics import (
 from modules.export_data import export_statistics_to_xlsx
 from utils.date_utils import format_date_vn
 from config import CONTINENT_RULES, PAGE_SIZE
+from utils.menu import menu
 
 # ============================================
 # PAGE CONFIG
@@ -32,8 +33,10 @@ st.set_page_config(
 # Check authentication
 if "authenticated" not in st.session_state or not st.session_state.authenticated:
     st.warning("⚠️ Vui lòng đăng nhập để sử dụng chức năng này")
-    st.page_link("app.py", label="← Về trang đăng nhập")
+    st.page_link("Trang_chu.py", label="← Về trang đăng nhập")
     st.stop()
+
+menu()
 
 # ============================================
 # PAGE CONTENT
@@ -54,7 +57,7 @@ st.markdown("### 🔧 Bộ lọc")
 # Filter Mode Toggle
 filter_mode = st.radio(
     "Chế độ lọc",
-    options=["Theo thời gian đến (Date of Arrival)", "Theo tổng ngày lưu trú (Total Days)"],
+    options=["Theo thời gian đến", "Theo tổng ngày lưu trú"],
     horizontal=True,
     label_visibility="collapsed"
 )
@@ -66,7 +69,7 @@ date_to_str = None
 min_days_val = None
 
 # Column 1 & 2: Date or Days Input
-if filter_mode == "Theo thời gian đến (Date of Arrival)":
+if filter_mode == "Theo thời gian đến":
     with col1:
         default_from = date.today() - timedelta(days=30)
         date_from = st.date_input("Từ ngày", value=default_from, format="DD/MM/YYYY")
@@ -622,5 +625,5 @@ with st.sidebar:
     ### 💡 Mẹo
     - Để xem tất cả: bỏ trống bộ lọc
     - Số ngày = 0: không lọc theo ngày
-    - Export Excel: lấy toàn bộ dữ liệu
+    - Xuất Excel: lấy toàn bộ dữ liệu
     """)

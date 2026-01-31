@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.models import create_user, verify_user
 from database.connection import get_connection, execute_query
 from utils.security import hash_password, is_strong_password
+from utils.menu import menu
 
 st.set_page_config(page_title="Cài đặt - QLNNN", page_icon="⚙️", layout="wide")
 
@@ -19,6 +20,8 @@ st.set_page_config(page_title="Cài đặt - QLNNN", page_icon="⚙️", layout=
 if "authenticated" not in st.session_state or not st.session_state.authenticated:
     st.warning("⚠️ Vui lòng đăng nhập")
     st.stop()
+
+menu()
 
 st.title("⚙️ Cài đặt")
 

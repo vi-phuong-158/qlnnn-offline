@@ -76,7 +76,7 @@ python import_from_export.py
 ## Khởi động ứng dụng
 
 ```bash
-streamlit run app.py
+streamlit run Trang_chu.py
 ```
 
 Mở trình duyệt và truy cập: `http://localhost:8501`
@@ -92,7 +92,7 @@ Mở trình duyệt và truy cập: `http://localhost:8501`
 
 ```
 qlnnn_offline/
-├── app.py                 # Entry point
+├── Trang_chu.py           # Entry point (was app.py)
 ├── config.py              # Cấu hình
 ├── requirements.txt       # Dependencies
 │
@@ -114,7 +114,7 @@ qlnnn_offline/
 ├── pages/                 # Streamlit pages
 │   ├── 1_📊_Tra_cuu.py
 │   ├── 2_📈_Thong_ke.py
-│   ├── 3_📥_Import.py
+│   ├── 3_📥_Nhap_lieu.py
 │   └── 4_⚙️_Cai_dat.py
 │
 ├── scripts/               # Utility scripts

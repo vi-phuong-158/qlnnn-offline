@@ -14,6 +14,7 @@ from modules.export_data import export_to_xlsx
 from utils.text_utils import split_passports, normalize_passport
 from utils.date_utils import format_date_vn
 from config import STATUS_COLORS, PAGE_SIZE
+from utils.menu import menu
 
 # ============================================
 # PAGE CONFIG
@@ -28,8 +29,10 @@ st.set_page_config(
 # Check authentication
 if "authenticated" not in st.session_state or not st.session_state.authenticated:
     st.warning("⚠️ Vui lòng đăng nhập để sử dụng chức năng này")
-    st.page_link("app.py", label="← Về trang đăng nhập")
+    st.page_link("Trang_chu.py", label="← Về trang đăng nhập")
     st.stop()
+
+menu()
 
 # ============================================
 # HELPER FUNCTIONS

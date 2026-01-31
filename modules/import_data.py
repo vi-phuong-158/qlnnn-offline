@@ -14,6 +14,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from database.connection import get_connection
 from utils.date_utils import format_date_for_db, parse_date_vn
 from utils.text_utils import normalize_passport, normalize_header
+from utils.validators import validate_import_row, ImportValidator
 from config import HEADER_MAP, IMPORTS_DIR
 
 
@@ -185,6 +186,63 @@ def _process_dataframe(df: pd.DataFrame, source_file: str) -> Dict[str, Any]:
         else:
             df[date_col] = None
 
+    # ==========================================
+    # VALIDATION
+    # ==========================================
+    valid_rows = []
+    validation_report = {
+        "total_errors": 0,
+        "total_warnings": 0,
+        "details": []
+    }
+    
+    # We need to iterate to validate
+    validator = ImportValidator()
+    
+    # Create a list of dicts for faster iteration
+    records = df.to_dict('records')
+    
+    for idx, row in enumerate(records):
+        # Reset validator for new row
+        validator.reset()
+        
+        # Run validation
+        validate_import_row(row, idx + 2, validator) # idx + 2 because 0-index + header
+        
+        result = validator.get_result()
+        
+        if result.is_valid:
+            valid_rows.append(row)
+        
+        # Collect errors/warnings if any
+        if result.error_count > 0 or result.warning_count > 0:
+            validation_report["total_errors"] += result.error_count
+            validation_report["total_warnings"] += result.warning_count
+            
+            if len(validation_report["details"]) < 100: # Limit report size
+                validation_report["details"].append(result.to_dict())
+    
+    # Update stats
+    rows_rejected = len(df) - len(valid_rows)
+    
+    if not valid_rows:
+        return {
+            "success": False,
+            "error": f"All rows failed validation. See report.",
+            "rows_imported": 0,
+            "rows_skipped": rows_skipped + rows_rejected,
+            "validation_report": validation_report
+        }
+    
+    # Re-create DataFrame with only valid rows
+    if valid_rows:
+        df = pd.DataFrame(valid_rows)
+    else:
+        # Should be handled by check above, but for safety
+        df = pd.DataFrame(columns=df.columns)
+        
+    # ==========================================
+
     # Add source file
     df['source_file'] = source_name
 
@@ -249,8 +307,9 @@ def _process_dataframe(df: pd.DataFrame, source_file: str) -> Dict[str, Any]:
         return {
             "success": True,
             "rows_imported": len(final_df),
-            "rows_skipped": rows_skipped,
+            "rows_skipped": rows_skipped + rows_rejected,
             "errors": None,
+            "validation_report": validation_report,
             "source_file": source_name
         }
 

@@ -15,7 +15,7 @@ from modules.import_data import import_excel, import_csv, import_verification_re
 from modules.export_data import generate_template
 from database.connection import get_table_count
 
-st.set_page_config(page_title="Import - QLNNN", page_icon="📥", layout="wide")
+st.set_page_config(page_title="Nhập liệu - QLNNN", page_icon="📥", layout="wide")
 
 # Auth check
 if "authenticated" not in st.session_state or not st.session_state.authenticated:
@@ -26,37 +26,37 @@ if st.session_state.user.get("role") != "admin":
     st.error("⛔ Chức năng này chỉ dành cho Admin")
     st.stop()
 
-st.title("📥 Import dữ liệu")
+st.title("📥 Nhập liệu hệ thống")
 
 # Stats
 col1, col2, col3 = st.columns(3)
 with col1:
     try:
         st.metric("📊 Bản ghi hiện tại", f"{get_table_count('raw_immigration'):,}")
-    except:
+    except (ValueError, Exception) as e:
         st.metric("📊 Bản ghi", "N/A")
 with col2:
     try:
         st.metric("💼 Lao động", get_table_count("ref_labor"))
-    except:
-        pass
+    except (ValueError, Exception):
+        st.metric("💼 Lao động", "N/A")
 with col3:
     try:
         st.metric("⚠️ Đối tượng chú ý", get_table_count("ref_watchlist"))
-    except:
-        pass
+    except (ValueError, Exception):
+        st.metric("⚠️ Đối tượng chú ý", "N/A")
 
 st.markdown("---")
 
 # File upload
-st.markdown("### 📋 Import dữ liệu NNN")
-uploaded_file = st.file_uploader("Chọn file Excel/CSV", type=["xlsx", "xls", "csv"])
+st.markdown("### 📋 Upload file Excel/CSV")
+uploaded_file = st.file_uploader("Chọn file dữ liệu", type=["xlsx", "xls", "csv"])
 
 if uploaded_file:
     st.info(f"📁 File: **{uploaded_file.name}**")
     
-    if st.button("📤 Import", type="primary"):
-        with st.spinner("Đang import..."):
+    if st.button("📤 Tiến hành nhập liệu", type="primary"):
+        with st.spinner("Đang xử lý dữ liệu..."):
             with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp:
                 tmp.write(uploaded_file.getvalue())
                 tmp_path = tmp.name
