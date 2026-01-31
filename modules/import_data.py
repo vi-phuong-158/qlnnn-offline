@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 import sys
+import streamlit as st
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -304,6 +305,11 @@ def _process_dataframe(df: pd.DataFrame, source_file: str) -> Dict[str, Any]:
 
         conn.commit()
 
+        try:
+            st.cache_data.clear()
+        except Exception:
+            pass
+
         return {
             "success": True,
             "rows_imported": len(final_df),
@@ -384,6 +390,11 @@ def import_verification_results(file_path: str) -> Dict[str, Any]:
         
         conn.commit()
         
+        try:
+            st.cache_data.clear()
+        except Exception:
+            pass
+
         return {
             "success": True,
             "rows_updated": rows_updated
@@ -470,6 +481,11 @@ def import_reference_table(
         
         conn.commit()
         
+        try:
+            st.cache_data.clear()
+        except Exception:
+            pass
+
         return {
             "success": True,
             "rows_imported": rows_imported,

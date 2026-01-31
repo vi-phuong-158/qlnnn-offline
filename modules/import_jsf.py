@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 from pathlib import Path
 import pandas as pd
 import pdfplumber
+import streamlit as st
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -335,6 +336,11 @@ def import_jsf(file_path: str) -> Dict[str, Any]:
         
         conn.commit()
         
+        try:
+            st.cache_data.clear()
+        except Exception:
+            pass
+
         return {
             "success": True,
             "rows_imported": len(final_df),
@@ -648,6 +654,11 @@ def import_jsf_chunked(
     if progress_callback:
         progress_callback(1.0, "Hoàn thành!")
     
+    try:
+        st.cache_data.clear()
+    except Exception:
+        pass
+
     return {
         "success": len(errors) == 0,
         "rows_imported": total_inserted + total_updated,
